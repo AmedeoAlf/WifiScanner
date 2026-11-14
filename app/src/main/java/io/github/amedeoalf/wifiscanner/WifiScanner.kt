@@ -36,11 +36,11 @@ class WifiScanner(private val ctx: Context) {
                 addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
             }
         )
-        if (!wifiManager.startScan()) throw Exception("Error in startScan()")
+//        if (!wifiManager.startScan()) throw Exception("Error in startScan()")
     }
 
     @SuppressLint("MissingPermission")
-    fun getNetworks(): List<ScanResult> = wifiManager.scanResults.map { it.convert(wifiManager) }
+    fun getNetworks(): List<ScanResult> = /*wifiManager.scanResults.map { it.convert(wifiManager) }*/ emptyList()
 }
 
 fun android.net.wifi.ScanResult.convert(wifiManager: WifiManager) = ScanResult(
