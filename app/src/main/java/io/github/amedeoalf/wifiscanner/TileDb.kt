@@ -3,20 +3,34 @@ package io.github.amedeoalf.wifiscanner
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
 
 class TileDb(private val ctx: Context) {
     private val cache = RAMCacheLayer(
         1000,
         CacheDirLayer(
-            NetworkCacheLayer(null) { URL("http://10.42.0.1:3500/${pathOf(it)}") }
+            NetworkCacheLayer(null) { URL("http://172.24.163.134:3500/${pathOf(it)}") }
         ) { ctx.cacheDir.resolve("tiles/${pathOf(it)}") }) {
         it.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
     }
 
-    suspend fun get(x: UInt, y: UInt, size: Int) = cache.get(toKey(x, y, size))
+    private val getJobs = ConcurrentHashMap<ULong, Deferred<Bitmap?>>()
+
+    suspend fun get(x: UInt, y: UInt, size: Int): Bitmap? {
+        val key = toKey(x, y, size)
+        cache.getSync(key)?.let {
+            return@get it
+        }
+        return coroutineScope {
+            (getJobs.getOrPut(key) { async { cache.get(key) } }).await()
+        }
+    }
+
+    fun getSync(x: UInt, y: UInt, size: Int) = cache.getSync(toKey(x, y, size))
 
     companion object {
         private fun toKey(x: UInt, y: UInt, size: Int) =
@@ -33,5 +47,9 @@ class TileDb(private val ctx: Context) {
             return "${size}x${size}/Q155+$x+$y.png"
         }
 
+        val tileSizes = listOf(500, 1000, 2000, 4000)
+
+        fun biggerTileSize(tileSize: Int) =
+            tileSizes.indexOf(tileSize).let { if (it == -1) null else tileSizes.getOrNull(it + 1) }
     }
 }
