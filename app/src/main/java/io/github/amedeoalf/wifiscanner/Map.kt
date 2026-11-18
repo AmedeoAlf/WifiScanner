@@ -173,6 +173,7 @@ fun Map(tileDb: TileDb, modifier: Modifier = Modifier) {
                                         canvasSize.center,
                                     )
                                     velocity = Offset.Zero
+                                    change.consume()
                                     continue
                                 } else if (justTapped && change.changedToUp())
                                     lastSwipeZoomTap = change.uptimeMillis
