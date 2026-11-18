@@ -102,10 +102,8 @@ fun computeRequestedSize(zoom: Float, smallerSize: Float) = (smallerSize / zoom)
 }
 
 @Composable
-fun Map(tileDb: TileDb, modifier: Modifier = Modifier) {
-    var pos by remember { mutableStateOf(Offset(5000f, 6000f)) }
-    val displayPos = remember { Animatable(pos, Offset.VectorConverter) }
-    var zoom by remember { mutableFloatStateOf(0.5f) }
+fun Map(mapState: MapState, modifier: Modifier = Modifier) {
+    val displayPos = remember { Animatable(mapState.position, Offset.VectorConverter) }
 
     val bitmaps = remember { mutableStateListOf<TileReq>() }
     var requestedSize by remember { mutableIntStateOf(0) }
@@ -114,32 +112,21 @@ fun Map(tileDb: TileDb, modifier: Modifier = Modifier) {
     var velocity by remember { mutableStateOf(Offset.Zero) }
     var centroidSize by remember { mutableFloatStateOf(0f) }
     var didFlick by remember { mutableStateOf(false) }
-    var canvasSize by remember { mutableStateOf(Size.Zero) }
-    LaunchedEffect(canvasSize, pos, pos, zoom) {
-        val newRequestedSize = computeRequestedSize(zoom, canvasSize.minDimension)
+    var lastSwipeZoomTap by remember { mutableStateOf<Long?>(null) }
+
+    LaunchedEffect(mapState.position, mapState.canvasSize, mapState.zoom) {
+        val newRequestedSize = computeRequestedSize(mapState.zoom, mapState.canvasSize.minDimension)
         bitmaps.clear()
-        bitmaps.addAll(requiredTiles(pos, canvasSize, zoom, tileDb))
+        bitmaps.addAll(mapState.requiredTiles())
         requestedSize = newRequestedSize
     }
+
     LaunchedEffect(didFlick) {
         if (didFlick) displayPos.animateDecay(velocity, decay) {
-            pos = value
+            mapState.setPos(value)
         }
     }
-//    Text(
-//        "zoom: $zoom, minSize: ${canvasSize.minDimension}, ${bitmaps.size} bitmaps: " + bitmaps.take(
-//            10
-//        ).joinToString { "${it.x} ${it.y} ${it.size} ${it.bitmap != null}" })
 
-    val zoomTo = { zoomFactor: Float, screenPos: Offset ->
-        zoom *= zoomFactor
-        val clamped = zoom.coerceIn(0.05f..4f)
-        if (zoomFactor != 1f && zoom == clamped) {
-            pos += (screenPos / zoom) * (zoomFactor - 1)
-        }
-        zoom = clamped
-    }
-    var lastSwipeZoomTap by remember { mutableStateOf<Long?>(null) }
     Canvas(
         modifier
             .background(Color.White)
@@ -168,9 +155,8 @@ fun Map(tileDb: TileDb, modifier: Modifier = Modifier) {
                                 val change = event.changes.first()
                                 if (shouldSwipeZoom) {
                                     val y = change.position.y - change.previousPosition.y
-                                    zoomTo(
-                                        exp(y / canvasSize.height * 10f),
-                                        canvasSize.center,
+                                    mapState.zoomBy(
+                                        exp(y / mapState.canvasSize.height * 10f),
                                     )
                                     velocity = Offset.Zero
                                     change.consume()
@@ -184,7 +170,7 @@ fun Map(tileDb: TileDb, modifier: Modifier = Modifier) {
                             val size = event.calculateCentroidSize()
                             if (size > 0.01f) {
                                 if (centroidSize != 0f)
-                                    zoomTo(size / centroidSize, event.calculateCentroid())
+                                    mapState.zoomBy(size / centroidSize, event.calculateCentroid())
                                 centroidSize = size
                             } else {
                                 centroidSize = 0f
@@ -212,11 +198,11 @@ fun Map(tileDb: TileDb, modifier: Modifier = Modifier) {
                                             .let { ds ->
                                                 ds.filter { it.isSpecified }
                                                     .reduceOrNull { a, b -> a + b }?.let {
-                                                        it / ds.size.toFloat() / zoom
+                                                        it / ds.size.toFloat() / mapState.zoom
                                                     }
                                             }
                                     if (delta != null) {
-                                        pos += delta
+                                        mapState.addToPos(delta)
                                         val dt =
                                             (motionEv.eventTime - lastMovement).toFloat() / 1000f
                                         if (dt > 0.001f)
@@ -230,51 +216,84 @@ fun Map(tileDb: TileDb, modifier: Modifier = Modifier) {
                         } while (event.changes.any { it.pressed })
                         didFlick = (releaseTime - movementTime) < 20
                         this@coroutineScope.launch {
-                            displayPos.snapTo(pos)
+                            displayPos.snapTo(mapState.position)
                         }
                     }
                 }
             }
     ) {
         bitmaps.forEach {
-            it.draw(this, if (didFlick) displayPos.value else pos, zoom)
+            it.draw(this, if (didFlick) displayPos.value else mapState.position, mapState.zoom)
         }
-        canvasSize = size
+        mapState.setCanvasSizeFrom(this)
     }
 }
 
 fun Offset.toIntOffset() = IntOffset(this.x.toInt(), this.y.toInt())
 
-fun requiredTiles(
-    position: Offset,
-    size: Size,
-    zoom: Float,
-    tileDb: TileDb
-): MutableList<TileReq> {
-    val ret = mutableListOf<TileReq>()
+@Composable
+fun rememberMapState(
+    tileDb: TileDb,
+    initialPosition: Offset = Offset.Zero,
+    initialZoom: Float = 1f
+) =
+    remember { MapState(tileDb, initialPosition, initialZoom) }
 
-    val reqSize = computeRequestedSize(zoom, size.minDimension)
+class MapState(val tileDb: TileDb, initialPosition: Offset, initialZoom: Float) {
+    var position by mutableStateOf(initialPosition)
+        private set
+    var zoom by mutableFloatStateOf(initialZoom)
+        private set
+    var canvasSize by mutableStateOf(Size.Zero)
+        private set
 
-    val xPos = position.x.toInt()
-    val yPos = position.y.toInt()
+    fun addToPos(offset: Offset) {
+        position += offset
+    }
 
-    val size = size / zoom
-    for (x in 0..(size.width.toInt() + reqSize) step reqSize) {
-        for (y in 0..(size.height.toInt() + reqSize) step reqSize) {
-            ret.add(
-                TileReq(
-                    (x + xPos).toUInt().roundTo(reqSize),
-                    (y + yPos).toUInt().roundTo(reqSize),
-                    reqSize,
-                    tileDb
-                )
-            )
+    fun setPos(newPos: Offset) {
+        position = newPos
+    }
+
+    fun zoomBy(zoomFactor: Float, screenPos: Offset = canvasSize.center) {
+        zoom *= zoomFactor
+        val clamped = zoom.coerceIn(0.05f..4f)
+        if (zoomFactor != 1f && zoom == clamped) {
+            position += (screenPos / zoom) * (zoomFactor - 1)
         }
+        zoom = clamped
     }
 
-    CoroutineScope(Dispatchers.IO).launch {
-        ret.parallelStream().forEach { launch { it.doReq() } }
+    fun setCanvasSizeFrom(canvas: DrawScope) {
+        canvasSize = canvas.size
     }
 
-    return ret
+    fun requiredTiles(): MutableList<TileReq> {
+        val ret = mutableListOf<TileReq>()
+
+        val reqSize = computeRequestedSize(zoom, canvasSize.minDimension)
+
+        val xPos = position.x.toInt()
+        val yPos = position.y.toInt()
+
+        val size = canvasSize / zoom
+        for (x in 0..(size.width.toInt() + reqSize) step reqSize) {
+            for (y in 0..(size.height.toInt() + reqSize) step reqSize) {
+                ret.add(
+                    TileReq(
+                        (x + xPos).toUInt().roundTo(reqSize),
+                        (y + yPos).toUInt().roundTo(reqSize),
+                        reqSize,
+                        tileDb
+                    )
+                )
+            }
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            ret.parallelStream().forEach { launch { it.doReq() } }
+        }
+
+        return ret
+    }
 }
