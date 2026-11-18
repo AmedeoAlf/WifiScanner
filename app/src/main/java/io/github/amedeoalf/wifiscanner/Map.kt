@@ -64,7 +64,7 @@ data class TileReq(
             dstSize = (size * zoom).toInt().let {
                 IntSize(it, it)
             }
-        ) /*else {
+        ) else {
             var biggerSize = TileDb.biggerTileSize(size)
             while (biggerSize != null) {
                 val newX = x.roundTo(biggerSize)
@@ -85,7 +85,6 @@ data class TileReq(
                 biggerSize = TileDb.biggerTileSize(biggerSize)
             }
         }
-            */
 
     }
 }
@@ -95,7 +94,8 @@ fun computeRequestedSize(zoom: Float, smallerSize: Float) = (smallerSize / zoom)
         size < 1000f -> 500
         size < 2000f -> 1000
         size < 4000f -> 2000
-        else -> 4000
+        size < 8000f -> 4000
+        else -> 8000
     }
 }
 
@@ -130,7 +130,7 @@ fun Map(tileDb: TileDb, modifier: Modifier = Modifier) {
 //        ).joinToString { "${it.x} ${it.y} ${it.size} ${it.bitmap != null}" })
     Canvas(
         modifier
-            .background(Color.Red)
+            .background(Color.White)
             .clipToBounds()
             .pointerInput(Unit) {
                 coroutineScope {
@@ -148,10 +148,12 @@ fun Map(tileDb: TileDb, modifier: Modifier = Modifier) {
                                 if (centroidSize != 0f) {
                                     val centroid = event.calculateCentroid()
                                     val zoomFactor = size / centroidSize
-                                    if (zoomFactor != 1f) {
+                                    zoom *= zoomFactor
+                                    val clamped = zoom.coerceIn(0.05f..4f)
+                                    if (zoomFactor != 1f && zoom == clamped) {
                                         pos += (centroid / zoom) * (zoomFactor - 1)
                                     }
-                                    zoom *= zoomFactor
+                                    zoom = clamped
                                 }
                                 centroidSize = size
                             } else {

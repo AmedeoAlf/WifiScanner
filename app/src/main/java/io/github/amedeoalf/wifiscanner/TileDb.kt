@@ -47,7 +47,7 @@ class TileDb(private val ctx: Context) {
             return "${size}x${size}/Q155+$x+$y.png"
         }
 
-        val tileSizes = listOf(500, 1000, 2000, 4000)
+        val tileSizes = listOf(500, 1000, 2000, 4000, 8000)
 
         fun biggerTileSize(tileSize: Int) =
             tileSizes.indexOf(tileSize).let { if (it == -1) null else tileSizes.getOrNull(it + 1) }
