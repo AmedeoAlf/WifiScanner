@@ -38,6 +38,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import io.github.amedeoalf.wifiscanner.map.Map
+import io.github.amedeoalf.wifiscanner.map.rememberMapState
 import io.github.amedeoalf.wifiscanner.ui.theme.WifiScannerTheme
 import java.io.File
 import java.time.LocalDateTime
