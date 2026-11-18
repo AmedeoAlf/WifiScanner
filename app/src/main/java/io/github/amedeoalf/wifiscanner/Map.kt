@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.center
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -38,6 +39,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlin.math.exp
 
 data class TileReq(
     val x: UInt,
@@ -128,6 +130,16 @@ fun Map(tileDb: TileDb, modifier: Modifier = Modifier) {
 //        "zoom: $zoom, minSize: ${canvasSize.minDimension}, ${bitmaps.size} bitmaps: " + bitmaps.take(
 //            10
 //        ).joinToString { "${it.x} ${it.y} ${it.size} ${it.bitmap != null}" })
+
+    val zoomTo = { zoomFactor: Float, screenPos: Offset ->
+        zoom *= zoomFactor
+        val clamped = zoom.coerceIn(0.05f..4f)
+        if (zoomFactor != 1f && zoom == clamped) {
+            pos += (screenPos / zoom) * (zoomFactor - 1)
+        }
+        zoom = clamped
+    }
+    var lastSwipeZoomTap by remember { mutableStateOf<Long?>(null) }
     Canvas(
         modifier
             .background(Color.White)
@@ -139,22 +151,39 @@ fun Map(tileDb: TileDb, modifier: Modifier = Modifier) {
                         var releaseTime = 0L
                         var movementTime = 0L
                         val lastPointerCount = mutableIntStateOf(0)
-                        awaitFirstDown().consume()
+
+                        val event = awaitFirstDown().also { it.consume() }
+
+                        var shouldSwipeZoom =
+                            lastSwipeZoomTap.let {
+                                it != null && event.uptimeMillis - it < 200
+                            }
+
+                        var justTapped = true
+
                         didFlick = false
                         do {
                             val event = awaitPointerEvent()
+                            if (event.changes.size == 1) {
+                                val change = event.changes.first()
+                                if (shouldSwipeZoom) {
+                                    val y = change.position.y - change.previousPosition.y
+                                    zoomTo(
+                                        exp(y / canvasSize.height * 10f),
+                                        canvasSize.center,
+                                    )
+                                    velocity = Offset.Zero
+                                    continue
+                                } else if (justTapped && change.changedToUp())
+                                    lastSwipeZoomTap = change.uptimeMillis
+                            } else {
+                                shouldSwipeZoom = false
+                            }
+                            justTapped = false
                             val size = event.calculateCentroidSize()
                             if (size > 0.01f) {
-                                if (centroidSize != 0f) {
-                                    val centroid = event.calculateCentroid()
-                                    val zoomFactor = size / centroidSize
-                                    zoom *= zoomFactor
-                                    val clamped = zoom.coerceIn(0.05f..4f)
-                                    if (zoomFactor != 1f && zoom == clamped) {
-                                        pos += (centroid / zoom) * (zoomFactor - 1)
-                                    }
-                                    zoom = clamped
-                                }
+                                if (centroidSize != 0f)
+                                    zoomTo(size / centroidSize, event.calculateCentroid())
                                 centroidSize = size
                             } else {
                                 centroidSize = 0f
