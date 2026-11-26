@@ -1,6 +1,7 @@
 package io.github.amedeoalf.wifiscanner
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -12,18 +13,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -33,17 +29,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import io.github.amedeoalf.wifiscanner.map.Map
+import io.github.amedeoalf.wifiscanner.map.TileDbImpl
 import io.github.amedeoalf.wifiscanner.map.rememberMapState
 import io.github.amedeoalf.wifiscanner.ui.theme.WifiScannerTheme
 import java.io.File
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 class MainActivity : ComponentActivity() {
     lateinit var updatePerms: (() -> Unit)
@@ -76,133 +70,64 @@ class MainActivity : ComponentActivity() {
 
             if (!gotPerms) {
                 requestPerms()
-            }
-
-            var scanner = if (gotPerms) WifiScanner(this) else null
-
-            WifiScannerTheme {
-                if (gotPerms) {
-                    var result by remember { mutableStateOf(emptyList<ScanResult>()) }
-                    val handler = Handler(Looper.getMainLooper())
-                    LaunchedEffect(Unit) {
-                        val updateResult =
-                            object : Runnable {
-                                override fun run() {
-                                    if (scanner != null) result =
-                                        scanner!!.getNetworks().sortedBy { it.estimatedDistance }
-                                    handler.postDelayed(this, 500)
-                                }
-                            }
-                        updateResult.run()
-                    }
-                    Surface() {
-                        Scaffold(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .safeDrawingPadding(),
-                            bottomBar = {
-                                val scrollState = remember { ScrollState(1000) }
-                                Row(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .safeContentPadding()
-                                        .horizontalScroll(scrollState),
-                                    horizontalArrangement = Arrangement.spacedBy(
-                                        10.dp,
-                                        Alignment.End
-                                    )
-                                ) {
-                                    val dumpDir = filesDir.resolve("dumps/")
-                                    var cleared by remember {
-                                        mutableStateOf(
-                                            dumpDir.listFiles()?.isEmpty() != false
-                                        )
-                                    }
-                                    Button({
-                                        dumpDir.deleteRecursively()
-                                        cleared = true
-                                    }, enabled = !cleared) { Text("Clear") }
-                                    Button({
-                                        val files = dumpDir.listFiles()
-                                        if (files == null || files.isEmpty()) {
-                                            Toast.makeText(
-                                                this@MainActivity,
-                                                "No reports saved",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        } else {
-                                            shareFiles(files.toList())
-                                        }
-                                    }) { Text("Share all") }
-                                    Button({
-                                        val timestamp = LocalDateTime.now()
-                                            .format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
-                                        dumpDir.mkdirs()
-                                        val fname = "$timestamp.json"
-                                        val file = dumpDir.resolve(fname)
-                                        file.writeText(result.toJSON().toString())
-                                        Toast.makeText(
-                                            this@MainActivity,
-                                            "saved '$fname'",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                        cleared = false
-                                    }) { Text("Save current") }
-                                    Button({
-                                        scanner = WifiScanner(this@MainActivity)
-                                    }) { Text("Scan") }
-                                }
-                            }) { innerPadding ->
-                            val scrollState = remember { ScrollState(0) }
-                            Column(
-                                Modifier
-                                    .padding(innerPadding)
-                                    .verticalScroll(scrollState)
-                            ) {
-                                Map(
-                                    rememberMapState(
-                                        TileDb(this@MainActivity),
-                                        Offset(5000f, 6000f)
-                                    ), Modifier
-                                        .fillMaxWidth()
-                                        .height(500.dp)
-                                )
-                                Text(
-                                    "${result.size} networks found",
-                                    style = MaterialTheme.typography.displaySmall
-                                )
-                                Text(result.joinToString("\n") {
-                                    "${it.bssid} ${it.ssid} ~${it.estimatedDistance.toFixed()}m"
-                                })
-                            }
-                        }
-                    }
-                } else {
+                WifiScannerTheme {
                     MissingPermScreen {
                         requestPerms()
                     }
                 }
+                return@setContent
+            }
+
+            var scanner = remember { WifiScanner(this) }
+            WifiScannerTheme {
+                var result by remember { mutableStateOf(emptyList<ScanResult>()) }
+                val handler = Handler(Looper.getMainLooper())
+                LaunchedEffect(Unit) {
+                    handler.runOnInterval(500) {
+                        result = scanner.getNetworks().sortedBy { it.estimatedDistance }
+                    }
+                }
+                MainScreen(
+                    rememberMapState(TileDbImpl(this), initialPosition = Offset(5000f, 6000f)),
+                    filesDir.resolve("dumps/"),
+                    networks = result,
+                    updateScanner = { scanner = WifiScanner(this) },
+                    toast = { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() },
+                    shareFiles = { shareFiles(this, it) },
+                )
             }
         }
     }
 
-    fun shareFiles(files: List<File>) {
-        val shareIntent: Intent = Intent().addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).apply {
-            action = Intent.ACTION_SEND_MULTIPLE
-            putExtra(
-                Intent.EXTRA_STREAM,
-                ArrayList(files.map {
-                    FileProvider.getUriForFile(
-                        this@MainActivity,
-                        "io.github.amedeoalf.wifiscanner.MyFileProvider",
-                        it
-                    )
-                })
-            )
-            type = "application/json"
-        }
 
-        startActivity(Intent.createChooser(shareIntent, null))
+}
+
+fun Handler.runOnInterval(onEveryMs: Long, fn: () -> Unit) {
+    val updateResult =
+        object : Runnable {
+            override fun run() {
+                fn()
+                postDelayed(this, onEveryMs)
+            }
+        }
+    updateResult.run()
+}
+
+fun shareFiles(ctx: Context, files: List<File>) {
+    val shareIntent: Intent = Intent().addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).apply {
+        action = Intent.ACTION_SEND_MULTIPLE
+        putExtra(
+            Intent.EXTRA_STREAM,
+            ArrayList(files.map {
+                FileProvider.getUriForFile(
+                    ctx,
+                    "io.github.amedeoalf.wifiscanner.MyFileProvider",
+                    it
+                )
+            })
+        )
+        type = "application/json"
     }
 
+    ctx.startActivity(Intent.createChooser(shareIntent, null))
 }

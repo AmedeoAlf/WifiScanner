@@ -1,5 +1,6 @@
 package io.github.amedeoalf.wifiscanner.map
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -8,7 +9,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.center
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import io.github.amedeoalf.wifiscanner.TileDb
+import androidx.compose.ui.platform.LocalResources
 import io.github.amedeoalf.wifiscanner.roundTo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -70,5 +71,9 @@ class MapState(val tileDb: TileDb, initialPosition: Offset, initialZoom: Float) 
         }
 
         return ret
+    }
+
+    companion object {
+        @Composable fun previewMapState() = rememberMapState(DummyTileDb(LocalResources.current))
     }
 }

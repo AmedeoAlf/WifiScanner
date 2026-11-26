@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculateCentroidSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,6 +29,8 @@ import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import io.github.amedeoalf.wifiscanner.onChange
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -40,7 +43,7 @@ fun Map(mapState: MapState, modifier: Modifier = Modifier) {
     val bitmaps = remember { mutableStateListOf<TileReq>() }
     var requestedSize by remember { mutableIntStateOf(0) }
 
-    val decay = exponentialDecay<Offset>()
+    val decay = exponentialDecay<Offset>(absVelocityThreshold = 1f)
     var velocity by remember { mutableStateOf(Offset.Zero) }
     var centroidSize by remember { mutableFloatStateOf(0f) }
     var didFlick by remember { mutableStateOf(false) }
@@ -160,3 +163,8 @@ fun Map(mapState: MapState, modifier: Modifier = Modifier) {
         mapState.setCanvasSizeFrom(this)
     }
 }
+
+
+@Preview
+@Composable
+fun MapPreview() = Map(MapState.previewMapState(), Modifier.size(200.dp))

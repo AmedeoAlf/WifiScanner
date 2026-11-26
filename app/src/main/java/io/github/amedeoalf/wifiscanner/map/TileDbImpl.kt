@@ -1,15 +1,18 @@
-package io.github.amedeoalf.wifiscanner
+package io.github.amedeoalf.wifiscanner.map
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import io.github.amedeoalf.wifiscanner.cachelayer.CacheDirLayer
+import io.github.amedeoalf.wifiscanner.cachelayer.NetworkCacheLayer
+import io.github.amedeoalf.wifiscanner.cachelayer.RAMCacheLayer
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 
-class TileDb(private val ctx: Context) {
+class TileDbImpl(private val ctx: Context): TileDb {
     private val cache = RAMCacheLayer(
         1000,
         CacheDirLayer(
@@ -20,7 +23,7 @@ class TileDb(private val ctx: Context) {
 
     private val getJobs = ConcurrentHashMap<ULong, Deferred<Bitmap?>>()
 
-    suspend fun get(x: UInt, y: UInt, size: Int): Bitmap? {
+    override suspend fun get(x: UInt, y: UInt, size: Int): Bitmap? {
         val key = toKey(x, y, size)
         cache.getSync(key)?.let {
             return@get it
@@ -30,7 +33,7 @@ class TileDb(private val ctx: Context) {
         }
     }
 
-    fun getSync(x: UInt, y: UInt, size: Int) = cache.getSync(toKey(x, y, size))
+    override fun getSync(x: UInt, y: UInt, size: Int) = cache.getSync(toKey(x, y, size))
 
     companion object {
         private fun toKey(x: UInt, y: UInt, size: Int) =

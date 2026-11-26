@@ -27,7 +27,7 @@ class WifiScanner(private val ctx: Context) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(p0: Context?, p1: Intent?) {
                 val success = p1?.getBooleanExtra(WifiManager.EXTRA_RESULTS_UPDATED, false) ?: false
-                if (!success) throw Exception("error in receiving networks")
+                if (!success) println("error in receiving networks") // throw Exception("error in receiving networks")
             }
         }
         ctx.registerReceiver(
@@ -36,7 +36,8 @@ class WifiScanner(private val ctx: Context) {
                 addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
             }
         )
-        if (!wifiManager.startScan()) throw Exception("Error in startScan()")
+//        if (!wifiManager.startScan()) throw Exception("Error in startScan()")
+        wifiManager.startScan()
     }
 
     @SuppressLint("MissingPermission")

@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
-import io.github.amedeoalf.wifiscanner.TileDb
 
 fun Offset.toIntOffset() = IntOffset(this.x.toInt(), this.y.toInt())
 
@@ -17,9 +16,8 @@ fun rememberMapState(
     remember { MapState(tileDb, initialPosition, initialZoom) }
 
 fun computeRequestedSize(zoom: Float, smallerSize: Float) = (smallerSize / zoom).let { size ->
-    TileDb.tileSizes
+    TileDbImpl.tileSizes
         .windowed(2).find { (_, biggerTile) -> size < biggerTile }
         ?.first()
-        ?: TileDb.tileSizes.last()
+        ?: TileDbImpl.tileSizes.last()
 }
-

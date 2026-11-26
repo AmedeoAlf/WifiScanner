@@ -5,7 +5,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.IntSize
-import io.github.amedeoalf.wifiscanner.TileDb
 import io.github.amedeoalf.wifiscanner.roundTo
 
 internal data class TileReq(
@@ -34,7 +33,7 @@ internal data class TileReq(
                 IntSize(it, it)
             }
         ) else {
-            var biggerSize = TileDb.biggerTileSize(size)
+            var biggerSize = TileDbImpl.biggerTileSize(size)
             while (biggerSize != null) {
                 val newX = x.roundTo(biggerSize)
                 val newY = y.roundTo(biggerSize)
@@ -51,7 +50,7 @@ internal data class TileReq(
                     )
                     return@draw
                 }
-                biggerSize = TileDb.biggerTileSize(biggerSize)
+                biggerSize = TileDbImpl.biggerTileSize(biggerSize)
             }
         }
 
